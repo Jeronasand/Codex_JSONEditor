@@ -68,6 +68,12 @@ button.ghost {
   box-shadow: none;
 }
 
+button.toggle-active {
+  background: linear-gradient(135deg, #f4dfb7 0%, #ffa25b 100%);
+  color: #111828;
+  box-shadow: 0 10px 24px rgba(255, 162, 91, 0.24);
+}
+
 #root {
   min-height: 100vh;
 }
@@ -232,10 +238,31 @@ button.ghost {
   border-color: rgba(255, 141, 130, 0.24);
 }
 
+.view-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.workspace-surface {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.workspace-surface.mode-split {
+  grid-template-columns: minmax(0, 1.25fr) minmax(300px, 0.75fr);
+}
+
+.workspace-surface.mode-editor,
+.workspace-surface.mode-tree {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .editor-frame {
   display: grid;
   gap: 0.75rem;
-  margin-top: 1rem;
 }
 
 .editor-heading {
@@ -301,6 +328,117 @@ button.ghost {
   position: relative;
 }
 
+.tree-panel {
+  display: grid;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.tree-shell,
+.tree-empty {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 24px;
+  background: rgba(5, 10, 18, 0.62);
+}
+
+.tree-shell {
+  min-height: 58vh;
+  overflow: hidden;
+}
+
+.tree-toolbar {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.9rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.tree-content {
+  padding: 0.8rem 0;
+  max-height: calc(58vh + 20px);
+  overflow: auto;
+}
+
+.tree-node {
+  display: grid;
+}
+
+.tree-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding-top: 0.45rem;
+  padding-bottom: 0.45rem;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-main);
+  text-align: left;
+}
+
+.tree-row:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.tree-row.is-expanded {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.tree-caret {
+  width: 16px;
+  text-align: center;
+  color: var(--accent);
+  flex: 0 0 16px;
+}
+
+.tree-key,
+.tree-value,
+.tree-separator {
+  font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+  font-size: 0.9rem;
+}
+
+.tree-key {
+  color: #f4dfb7;
+}
+
+.tree-separator {
+  color: rgba(198, 202, 216, 0.52);
+}
+
+.tree-value-string {
+  color: #8fe2bb;
+}
+
+.tree-value-number {
+  color: #8cb8ff;
+}
+
+.tree-value-boolean,
+.tree-value-null {
+  color: #ffb58f;
+}
+
+.tree-value-object,
+.tree-value-array {
+  color: #c6cad8;
+}
+
+.tree-empty {
+  padding: 1.1rem;
+}
+
+.tree-empty strong {
+  display: block;
+  margin-bottom: 0.35rem;
+}
+
+.tree-empty p {
+  margin: 0;
+  color: var(--text-muted);
+}
+
 .error-highlight {
   position: absolute;
   left: 0;
@@ -362,6 +500,14 @@ textarea::placeholder {
 
   .editor-shell {
     grid-template-columns: 54px minmax(0, 1fr);
+  }
+
+  .workspace-surface.mode-split {
+    grid-template-columns: 1fr;
+  }
+
+  .tree-shell {
+    min-height: 42vh;
   }
 
   textarea {

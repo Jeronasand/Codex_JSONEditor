@@ -9,6 +9,9 @@ type StatusState = {
   errorLine: number | null;
 };
 
+type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
+type ViewMode = 'editor' | 'split' | 'tree';
+
 const EDITOR_LINE_HEIGHT = 24;
 const EDITOR_PADDING_TOP = 18;
 
@@ -59,8 +62,126 @@ function getLineAndColumn(source: string, position: number) {
 }
 
 function parseJson(text: string) {
-  const parsed = JSON.parse(text);
+  const parsed = JSON.parse(text) as JsonValue;
   return parsed;
+}
+
+function formatPreviewValue(value: JsonValue) {
+  if (value === null) {
+    return 'null';
+  }
+
+  if (Array.isArray(value)) {
+    return `Array(${value.length})`;
+  }
+
+  if (typeof value === 'object') {
+    return `Object(${Object.keys(value).length})`;
+  }
+
+  if (typeof value === 'string') {
+    return `"${value}"`;
+  }
+
+  return String(value);
+}
+
+function getNodeChildren(value: JsonValue) {
+  if (Array.isArray(value)) {
+    return value.map((child, index) => ({
+      label: `[${index}]`,
+      value: child,
+      path: `[${index}]`,
+    }));
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.entries(value).map(([key, child]) => ({
+      label: key,
+      value: child,
+      path: key,
+    }));
+  }
+
+  return [];
+}
+
+function joinPath(parentPath: string, nextPath: string) {
+  if (parentPath === 'root') {
+    return `root.${nextPath}`;
+  }
+
+  if (nextPath.startsWith('[')) {
+    return `${parentPath}${nextPath}`;
+  }
+
+  return `${parentPath}.${nextPath}`;
+}
+
+type TreeNodeProps = {
+  expandedPaths: Set<string>;
+  level?: number;
+  nodeKey: string;
+  nodePath: string;
+  nodeValue: JsonValue;
+  onToggle: (path: string) => void;
+};
+
+function TreeNode({
+  expandedPaths,
+  level = 0,
+  nodeKey,
+  nodePath,
+  nodeValue,
+  onToggle,
+}: TreeNodeProps) {
+  const children = getNodeChildren(nodeValue);
+  const isExpandable = children.length > 0;
+  const isExpanded = expandedPaths.has(nodePath);
+
+  return (
+    <div className="tree-node">
+      <button
+        type="button"
+        className={`tree-row ${isExpandable ? 'is-expandable' : 'is-leaf'} ${isExpanded ? 'is-expanded' : ''}`}
+        style={{ paddingLeft: `${level * 16 + 10}px` }}
+        onClick={() => {
+          if (isExpandable) {
+            onToggle(nodePath);
+          }
+        }}
+      >
+        <span className="tree-caret" aria-hidden="true">
+          {isExpandable ? (isExpanded ? '▾' : '▸') : '•'}
+        </span>
+        <span className="tree-key">{nodeKey}</span>
+        <span className="tree-separator">:</span>
+        <span className={`tree-value tree-value-${Array.isArray(nodeValue) ? 'array' : nodeValue === null ? 'null' : typeof nodeValue}`}>
+          {formatPreviewValue(nodeValue)}
+        </span>
+      </button>
+
+      {isExpandable && isExpanded ? (
+        <div className="tree-children">
+          {children.map((child) => {
+            const childPath = joinPath(nodePath, child.path);
+
+            return (
+              <TreeNode
+                key={childPath}
+                expandedPaths={expandedPaths}
+                level={level + 1}
+                nodeKey={child.label}
+                nodePath={childPath}
+                nodeValue={child.value}
+                onToggle={onToggle}
+              />
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function buildErrorStatus(text: string, error: unknown): StatusState {
@@ -90,6 +211,10 @@ export default function App() {
   const [text, setText] = useState(starterJson);
   const [status, setStatus] = useState<StatusState>(defaultStatus);
   const [scrollTop, setScrollTop] = useState(0);
+  const [viewMode, setViewMode] = useState<ViewMode>('split');
+  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(
+    () => new Set(['root', 'root.features']),
+  );
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const lineNumbers = useMemo(
     () => Array.from({ length: text === '' ? 1 : text.split('\n').length }, (_, index) => index + 1),
@@ -260,6 +385,34 @@ export default function App() {
     } satisfies CSSProperties;
   }, [scrollTop, status.errorLine]);
 
+  const parsedTreeData = useMemo(() => {
+    const trimmed = text.trim();
+
+    if (trimmed === '') {
+      return null;
+    }
+
+    try {
+      return parseJson(text);
+    } catch {
+      return null;
+    }
+  }, [text]);
+
+  const handleToggleNode = (path: string) => {
+    setExpandedPaths((previous) => {
+      const next = new Set(previous);
+
+      if (next.has(path)) {
+        next.delete(path);
+      } else {
+        next.add(path);
+      }
+
+      return next;
+    });
+  };
+
   return (
     <div className="app-shell">
       <div className="ambient ambient-left" />
@@ -327,49 +480,132 @@ export default function App() {
             />
           </div>
 
+          <div className="view-toggle" role="tablist" aria-label="视图切换">
+            <button
+              type="button"
+              className={viewMode === 'editor' ? 'toggle-active' : 'ghost'}
+              onClick={() => setViewMode('editor')}
+            >
+              文本
+            </button>
+            <button
+              type="button"
+              className={viewMode === 'split' ? 'toggle-active' : 'ghost'}
+              onClick={() => setViewMode('split')}
+            >
+              分栏
+            </button>
+            <button
+              type="button"
+              className={viewMode === 'tree' ? 'toggle-active' : 'ghost'}
+              onClick={() => setViewMode('tree')}
+            >
+              树形
+            </button>
+          </div>
+
           <div className={`status status-${status.tone}`}>
             <strong>{status.title}</strong>
             <span>{status.detail}</span>
           </div>
 
-          <label className="editor-frame" htmlFor="json-editor">
-            <div className="editor-heading">
-              <span className="editor-label">Editor</span>
-              <span className="editor-hint">
-                支持粘贴、上传、校验、格式化、压缩与导出
-              </span>
-            </div>
-
-            <div className="editor-shell">
-              <div className="editor-gutter" aria-hidden="true">
-                <div
-                  className="editor-gutter-inner"
-                  style={{ transform: `translateY(-${scrollTop}px)` }}
-                >
-                  {lineNumbers.map((lineNumber) => (
-                    <span
-                      key={lineNumber}
-                      className={lineNumber === status.errorLine ? 'line-number active' : 'line-number'}
-                    >
-                      {lineNumber}
-                    </span>
-                  ))}
+          <div className={`workspace-surface mode-${viewMode}`}>
+            {viewMode !== 'tree' ? (
+              <label className="editor-frame" htmlFor="json-editor">
+                <div className="editor-heading">
+                  <span className="editor-label">Editor</span>
+                  <span className="editor-hint">
+                    支持粘贴、上传、校验、格式化、压缩与导出
+                  </span>
                 </div>
-              </div>
 
-              <div className="editor-main">
-                {highlightStyle ? <div className="error-highlight" style={highlightStyle} /> : null}
-                <textarea
-                  id="json-editor"
-                  spellCheck={false}
-                  value={text}
-                  onChange={(event) => setText(event.target.value)}
-                  onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
-                  placeholder="在这里粘贴 JSON 内容..."
-                />
-              </div>
-            </div>
-          </label>
+                <div className="editor-shell">
+                  <div className="editor-gutter" aria-hidden="true">
+                    <div
+                      className="editor-gutter-inner"
+                      style={{ transform: `translateY(-${scrollTop}px)` }}
+                    >
+                      {lineNumbers.map((lineNumber) => (
+                        <span
+                          key={lineNumber}
+                          className={lineNumber === status.errorLine ? 'line-number active' : 'line-number'}
+                        >
+                          {lineNumber}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="editor-main">
+                    {highlightStyle ? <div className="error-highlight" style={highlightStyle} /> : null}
+                    <textarea
+                      id="json-editor"
+                      spellCheck={false}
+                      value={text}
+                      onChange={(event) => setText(event.target.value)}
+                      onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
+                      placeholder="在这里粘贴 JSON 内容..."
+                    />
+                  </div>
+                </div>
+              </label>
+            ) : null}
+
+            {viewMode !== 'editor' ? (
+              <section className="tree-panel" aria-label="JSON 树形视图">
+                <div className="editor-heading">
+                  <span className="editor-label">Tree View</span>
+                  <span className="editor-hint">点击节点可展开或收起子项</span>
+                </div>
+
+                {parsedTreeData ? (
+                  <div className="tree-shell">
+                    <div className="tree-toolbar">
+                      <button
+                        type="button"
+                        className="ghost"
+                        onClick={() => setExpandedPaths(new Set(['root']))}
+                      >
+                        全部收起
+                      </button>
+                      <button
+                        type="button"
+                        className="ghost"
+                        onClick={() => {
+                          const next = new Set<string>();
+                          const walk = (value: JsonValue, path: string) => {
+                            next.add(path);
+                            getNodeChildren(value).forEach((child) => {
+                              walk(child.value, joinPath(path, child.path));
+                            });
+                          };
+                          walk(parsedTreeData, 'root');
+                          setExpandedPaths(next);
+                        }}
+                      >
+                        全部展开
+                      </button>
+                    </div>
+
+                    <div className="tree-content">
+                      <TreeNode
+                        expandedPaths={expandedPaths}
+                        nodeKey="root"
+                        nodePath="root"
+                        nodeValue={parsedTreeData}
+                        onToggle={handleToggleNode}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="tree-empty">
+                    <strong>树形视图暂不可用</strong>
+                    <p>当前 JSON 为空或格式不合法。先修正文本内容，再切换到树形视图查看结构。</p>
+                  </div>
+                )}
+              </section>
+            ) : null}
+          </div>
 
           <div className="tips-grid">
             <article>
