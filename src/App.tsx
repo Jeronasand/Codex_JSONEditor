@@ -1,4 +1,4 @@
-import { ChangeEvent, useMemo, useRef, useState } from 'react';
+import { ChangeEvent, CSSProperties, useMemo, useRef, useState } from 'react';
 
 type StatusTone = 'idle' | 'success' | 'error';
 
@@ -6,7 +6,11 @@ type StatusState = {
   tone: StatusTone;
   title: string;
   detail: string;
+  errorLine: number | null;
 };
+
+const EDITOR_LINE_HEIGHT = 24;
+const EDITOR_PADDING_TOP = 18;
 
 const starterJson = `{
   "name": "JSON Editor",
@@ -25,6 +29,7 @@ const defaultStatus: StatusState = {
   tone: 'idle',
   title: 'Ready',
   detail: '粘贴或输入 JSON，然后使用上方工具进行校验、格式化或导出。',
+  errorLine: null,
 };
 
 function getErrorLocation(message: string) {
@@ -67,6 +72,7 @@ function buildErrorStatus(text: string, error: unknown): StatusState {
       tone: 'error',
       title: 'JSON 无效',
       detail: message,
+      errorLine: null,
     };
   }
 
@@ -76,13 +82,19 @@ function buildErrorStatus(text: string, error: unknown): StatusState {
     tone: 'error',
     title: 'JSON 无效',
     detail: `${message} (行 ${line}，列 ${column})`,
+    errorLine: line,
   };
 }
 
 export default function App() {
   const [text, setText] = useState(starterJson);
   const [status, setStatus] = useState<StatusState>(defaultStatus);
+  const [scrollTop, setScrollTop] = useState(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const lineNumbers = useMemo(
+    () => Array.from({ length: text === '' ? 1 : text.split('\n').length }, (_, index) => index + 1),
+    [text],
+  );
 
   const stats = useMemo(() => {
     const trimmed = text.trim();
@@ -100,6 +112,7 @@ export default function App() {
         tone: 'idle',
         title: '编辑区为空',
         detail: '请输入 JSON 内容后再执行校验、格式化或压缩。',
+        errorLine: null,
       });
       return null;
     }
@@ -110,6 +123,7 @@ export default function App() {
         tone: 'success',
         title: 'JSON 有效',
         detail: `解析成功，根节点类型为 ${Array.isArray(parsed) ? 'array' : typeof parsed}。`,
+        errorLine: null,
       });
       return parsed;
     } catch (error) {
@@ -131,6 +145,7 @@ export default function App() {
       tone: 'success',
       title: '格式化完成',
       detail: '当前 JSON 已按 2 空格缩进重新排版。',
+      errorLine: null,
     });
   };
 
@@ -147,6 +162,7 @@ export default function App() {
       tone: 'success',
       title: '压缩完成',
       detail: '当前 JSON 已压缩为单行结构。',
+      errorLine: null,
     });
   };
 
@@ -160,6 +176,7 @@ export default function App() {
       tone: 'idle',
       title: '已清空',
       detail: '编辑区内容已清空。',
+      errorLine: null,
     });
   };
 
@@ -170,6 +187,7 @@ export default function App() {
         tone: 'success',
         title: '复制成功',
         detail: '当前内容已经复制到剪贴板。',
+        errorLine: status.errorLine,
       });
     } catch (error) {
       setStatus({
@@ -177,6 +195,7 @@ export default function App() {
         title: '复制失败',
         detail:
           error instanceof Error ? error.message : '浏览器未授予剪贴板访问权限。',
+        errorLine: status.errorLine,
       });
     }
   };
@@ -194,6 +213,7 @@ export default function App() {
       tone: 'success',
       title: '下载已开始',
       detail: '当前内容已导出为 json-editor-export.json。',
+      errorLine: status.errorLine,
     });
   };
 
@@ -215,17 +235,30 @@ export default function App() {
         tone: 'success',
         title: '文件已导入',
         detail: `已载入 ${file.name}，可以继续编辑或校验。`,
+        errorLine: null,
       });
     } catch (error) {
       setStatus({
         tone: 'error',
         title: '文件读取失败',
         detail: error instanceof Error ? error.message : '无法读取所选文件。',
+        errorLine: null,
       });
     } finally {
       event.target.value = '';
     }
   };
+
+  const highlightStyle = useMemo(() => {
+    if (status.errorLine === null) {
+      return undefined;
+    }
+
+    return {
+      top: `${EDITOR_PADDING_TOP + (status.errorLine - 1) * EDITOR_LINE_HEIGHT - scrollTop}px`,
+      height: `${EDITOR_LINE_HEIGHT}px`,
+    } satisfies CSSProperties;
+  }, [scrollTop, status.errorLine]);
 
   return (
     <div className="app-shell">
@@ -237,13 +270,28 @@ export default function App() {
           <p className="eyebrow">Static React Utility</p>
           <h1>JSON Editor</h1>
           <p className="hero-copy">
-            一个可直接打包部署的 JSON 编辑器，专注常用文本编辑、校验和导入导出体验。
+            一个可直接打包部署的 JSON 编辑器，适合快速整理接口返回、配置文件和调试样本。
           </p>
 
           <div className="meta-row">
             <span>{stats.lines} lines</span>
             <span>{stats.characters} chars</span>
             <span>{stats.empty ? 'empty' : 'in sync'}</span>
+          </div>
+
+          <div className="hero-grid">
+            <article>
+              <strong>快速整理</strong>
+              <p>一键格式化和压缩，适合在联调、排查和分享 JSON 时快速切换视图。</p>
+            </article>
+            <article>
+              <strong>错误定位</strong>
+              <p>解析失败时会标出行列信息，并在行号栏和编辑区高亮错误所在行。</p>
+            </article>
+            <article>
+              <strong>静态部署</strong>
+              <p>产物是纯前端静态文件，可以直接部署到 GitHub Pages、Vercel 或任意 CDN。</p>
+            </article>
           </div>
         </section>
 
@@ -285,15 +333,58 @@ export default function App() {
           </div>
 
           <label className="editor-frame" htmlFor="json-editor">
-            <span className="editor-label">Editor</span>
-            <textarea
-              id="json-editor"
-              spellCheck={false}
-              value={text}
-              onChange={(event) => setText(event.target.value)}
-              placeholder="在这里粘贴 JSON 内容..."
-            />
+            <div className="editor-heading">
+              <span className="editor-label">Editor</span>
+              <span className="editor-hint">
+                支持粘贴、上传、校验、格式化、压缩与导出
+              </span>
+            </div>
+
+            <div className="editor-shell">
+              <div className="editor-gutter" aria-hidden="true">
+                <div
+                  className="editor-gutter-inner"
+                  style={{ transform: `translateY(-${scrollTop}px)` }}
+                >
+                  {lineNumbers.map((lineNumber) => (
+                    <span
+                      key={lineNumber}
+                      className={lineNumber === status.errorLine ? 'line-number active' : 'line-number'}
+                    >
+                      {lineNumber}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="editor-main">
+                {highlightStyle ? <div className="error-highlight" style={highlightStyle} /> : null}
+                <textarea
+                  id="json-editor"
+                  spellCheck={false}
+                  value={text}
+                  onChange={(event) => setText(event.target.value)}
+                  onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
+                  placeholder="在这里粘贴 JSON 内容..."
+                />
+              </div>
+            </div>
           </label>
+
+          <div className="tips-grid">
+            <article>
+              <strong>输入建议</strong>
+              <p>只支持标准 JSON，不支持注释、尾随逗号或 JSON5 语法。</p>
+            </article>
+            <article>
+              <strong>导入导出</strong>
+              <p>上传本地 `.json` 文件后会直接载入编辑器，下载会导出当前文本内容。</p>
+            </article>
+            <article>
+              <strong>复制提醒</strong>
+              <p>复制按钮依赖浏览器剪贴板权限；若失败，状态区会显示原因。</p>
+            </article>
+          </div>
         </section>
       </main>
     </div>
