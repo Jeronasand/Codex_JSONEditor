@@ -2,6 +2,8 @@
 
 一个基于 React + Vite + TypeScript 的静态 JSON Editor 项目。
 
+在线访问地址：[https://jsoneditor.jeronasand.cn](https://jsoneditor.jeronasand.cn)
+
 ## 功能
 
 - 文本编辑 JSON

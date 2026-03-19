@@ -467,6 +467,11 @@ button.toggle-active {
   box-shadow: none;
 }
 
+.tree-action-button.active {
+  background: rgba(255, 162, 91, 0.18);
+  color: #ffd7b4;
+}
+
 .tree-action-button.save {
   background: linear-gradient(135deg, #f4dfb7 0%, #ffa25b 100%);
   color: #111828;
@@ -474,33 +479,6 @@ button.toggle-active {
 
 .tree-action-button.cancel {
   background: rgba(255, 255, 255, 0.08);
-}
-
-.tree-editor {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  min-width: 0;
-}
-
-.tree-editor input,
-.tree-editor select {
-  min-width: 90px;
-  max-width: 100%;
-  padding: 0.42rem 0.68rem;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--text-main);
-  outline: none;
-}
-
-.tree-editor input:focus,
-.tree-editor select:focus {
-  border-color: rgba(255, 162, 91, 0.48);
-  box-shadow: 0 0 0 3px rgba(255, 162, 91, 0.12);
 }
 
 .tree-empty {
@@ -556,6 +534,133 @@ textarea::placeholder {
   color: rgba(198, 202, 216, 0.52);
 }
 
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(6, 10, 18, 0.7);
+  backdrop-filter: blur(12px);
+}
+
+.edit-modal {
+  width: min(560px, 100%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 28px;
+  background:
+    linear-gradient(180deg, rgba(28, 33, 48, 0.98), rgba(14, 18, 29, 0.98));
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45);
+  padding: 1.2rem;
+}
+
+.edit-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.edit-modal-eyebrow {
+  margin: 0 0 0.35rem;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 0.75rem;
+}
+
+.edit-modal-header h2 {
+  margin: 0;
+  font-size: 1.8rem;
+}
+
+.modal-close {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-main);
+  box-shadow: none;
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.edit-modal-path {
+  display: grid;
+  gap: 0.25rem;
+  margin-top: 1rem;
+  padding: 0.9rem 1rem;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.edit-modal-path strong {
+  font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+  color: #f4dfb7;
+}
+
+.edit-modal-path span {
+  font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+.modal-form {
+  display: grid;
+  gap: 0.95rem;
+  margin-top: 1rem;
+}
+
+.modal-field {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.modal-field span {
+  color: var(--text-muted);
+  font-size: 0.92rem;
+}
+
+.modal-field input,
+.modal-field select {
+  width: 100%;
+  min-width: 0;
+  padding: 0.8rem 0.9rem;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-main);
+  outline: none;
+}
+
+.modal-field input:focus,
+.modal-field select:focus {
+  border-color: rgba(255, 162, 91, 0.48);
+  box-shadow: 0 0 0 4px rgba(255, 162, 91, 0.12);
+}
+
+.modal-null-tip {
+  padding: 0.85rem 0.95rem;
+  border-radius: 16px;
+  background: rgba(140, 184, 255, 0.09);
+  color: var(--text-muted);
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1.2rem;
+}
+
+.modal-actions button {
+  min-width: 120px;
+}
+
 @media (max-width: 960px) {
   .workspace {
     width: min(100% - 1.5rem, 1120px);
@@ -569,6 +674,11 @@ textarea::placeholder {
   .hero-grid,
   .tips-grid {
     grid-template-columns: 1fr;
+  }
+
+  .tree-toolbar button,
+  .tree-actions .tree-action-button {
+    min-height: 42px;
   }
 }
 
@@ -603,6 +713,10 @@ textarea::placeholder {
     text-align: center;
   }
 
+  .tree-toolbar button {
+    flex: 1 1 calc(50% - 0.75rem);
+  }
+
   .tree-shell {
     min-height: 42vh;
   }
@@ -623,21 +737,12 @@ textarea::placeholder {
   }
 
   .tree-actions {
-    width: 100%;
     padding-right: 0.75rem;
-    padding-bottom: 0.4rem;
-    justify-content: flex-start;
+    justify-content: flex-end;
   }
 
-  .tree-editor {
-    width: 100%;
-    justify-content: flex-start;
-  }
-
-  .tree-editor input,
-  .tree-editor select,
   .tree-action-button {
-    width: 100%;
+    min-width: 84px;
   }
 
   .tree-row-main .tree-key,
@@ -648,5 +753,177 @@ textarea::placeholder {
 
   textarea {
     min-height: 52vh;
+  }
+
+  .edit-modal {
+    padding: 1rem;
+    border-radius: 22px;
+  }
+
+  .modal-actions {
+    flex-direction: column-reverse;
+  }
+
+  .modal-actions button {
+    width: 100%;
+  }
+
+  .modal-close {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+@media (max-width: 540px) {
+  .workspace {
+    width: calc(100% - 0.75rem);
+    padding: 0.75rem 0 1.5rem;
+    gap: 0.85rem;
+  }
+
+  .hero-card,
+  .panel {
+    padding: 0.8rem;
+    border-radius: 20px;
+  }
+
+  .hero-card h1 {
+    font-size: 2.1rem;
+  }
+
+  .hero-copy,
+  .editor-hint,
+  .status span,
+  .tips-grid p,
+  .hero-grid p {
+    font-size: 0.92rem;
+  }
+
+  .meta-row {
+    gap: 0.5rem;
+  }
+
+  .meta-row span {
+    font-size: 0.82rem;
+  }
+
+  .toolbar,
+  .view-toggle,
+  .tree-toolbar {
+    gap: 0.5rem;
+  }
+
+  .toolbar button,
+  .view-toggle button,
+  .tree-toolbar button {
+    flex: 1 1 100%;
+    width: 100%;
+    min-height: 44px;
+    padding: 0.7rem 0.9rem;
+  }
+
+  .editor-shell {
+    grid-template-columns: 44px minmax(0, 1fr);
+    border-radius: 18px;
+  }
+
+  .editor-gutter {
+    padding: 14px 0;
+  }
+
+  .line-number {
+    font-size: 0.74rem;
+  }
+
+  textarea {
+    min-height: 48vh;
+    padding: 14px;
+    font-size: 0.9rem;
+  }
+
+  .tree-shell,
+  .tree-empty {
+    border-radius: 18px;
+  }
+
+  .tree-toolbar {
+    padding: 0.75rem;
+  }
+
+  .tree-content {
+    max-height: 50vh;
+  }
+
+  .tree-row {
+    gap: 0.4rem;
+  }
+
+  .tree-row-main {
+    padding: 0.4rem 0;
+  }
+
+  .tree-actions {
+    width: 100%;
+    padding-right: 0.5rem;
+  }
+
+  .tree-action-button {
+    width: 100%;
+  }
+
+  .modal-backdrop {
+    align-items: flex-end;
+    padding: 0.5rem;
+  }
+
+  .edit-modal {
+    width: 100%;
+    max-height: min(82vh, 720px);
+    overflow: auto;
+    padding: 0.95rem;
+    border-radius: 22px 22px 14px 14px;
+  }
+
+  .edit-modal-header {
+    align-items: center;
+  }
+
+  .edit-modal-header h2 {
+    font-size: 1.4rem;
+  }
+
+  .edit-modal-path {
+    padding: 0.8rem;
+  }
+
+  .modal-form {
+    gap: 0.8rem;
+  }
+
+  .modal-field input,
+  .modal-field select {
+    padding: 0.72rem 0.8rem;
+    border-radius: 14px;
+  }
+
+  .modal-actions {
+    gap: 0.6rem;
+  }
+}
+
+@media (max-width: 400px) {
+  .hero-card h1 {
+    font-size: 1.85rem;
+  }
+
+  .editor-label,
+  .eyebrow {
+    font-size: 0.7rem;
+  }
+
+  .tree-row-main .tree-key,
+  .tree-row-main .tree-value,
+  .tree-row-main .tree-separator {
+    font-size: 0.8rem;
   }
 }

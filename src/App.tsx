@@ -17,6 +17,7 @@ type EditingState = {
   path: string;
   kind: PrimitiveKind;
   draft: string;
+  nodeKey: string;
 };
 
 const EDITOR_LINE_HEIGHT = 24;
@@ -214,11 +215,7 @@ type TreeNodeProps = {
   nodePath: string;
   nodeSegments: PathSegment[];
   nodeValue: JsonValue;
-  onCancelEdit: () => void;
-  onChangeDraft: (value: string) => void;
-  onChangeKind: (kind: PrimitiveKind) => void;
-  onSaveEdit: () => void;
-  onStartEdit: (path: string, value: null | boolean | number | string) => void;
+  onStartEdit: (path: string, nodeKey: string, value: null | boolean | number | string) => void;
   onToggle: (path: string) => void;
 };
 
@@ -230,10 +227,6 @@ function TreeNode({
   nodePath,
   nodeSegments,
   nodeValue,
-  onCancelEdit,
-  onChangeDraft,
-  onChangeKind,
-  onSaveEdit,
   onStartEdit,
   onToggle,
 }: TreeNodeProps) {
@@ -272,56 +265,13 @@ function TreeNode({
 
         {isPrimitive ? (
           <div className="tree-actions">
-            {isEditing ? (
-              <div className="tree-editor">
-                <select
-                  aria-label="值类型"
-                  value={editingState.kind}
-                  onChange={(event) => onChangeKind(event.target.value as PrimitiveKind)}
-                >
-                  <option value="string">string</option>
-                  <option value="number">number</option>
-                  <option value="boolean">boolean</option>
-                  <option value="null">null</option>
-                </select>
-
-                {editingState.kind === 'boolean' ? (
-                  <select
-                    aria-label="布尔值"
-                    value={editingState.draft}
-                    onChange={(event) => onChangeDraft(event.target.value)}
-                  >
-                    <option value="true">true</option>
-                    <option value="false">false</option>
-                  </select>
-                ) : null}
-
-                {editingState.kind === 'string' || editingState.kind === 'number' ? (
-                  <input
-                    aria-label="节点值"
-                    type="text"
-                    value={editingState.draft}
-                    onChange={(event) => onChangeDraft(event.target.value)}
-                    placeholder={editingState.kind === 'string' ? '输入文本' : '输入数字'}
-                  />
-                ) : null}
-
-                <button type="button" className="tree-action-button save" onClick={onSaveEdit}>
-                  保存
-                </button>
-                <button type="button" className="tree-action-button cancel" onClick={onCancelEdit}>
-                  取消
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                className="tree-action-button"
-                onClick={() => onStartEdit(nodePath, nodeValue)}
-              >
-                编辑
-              </button>
-            )}
+            <button
+              type="button"
+              className={`tree-action-button ${isEditing ? 'active' : ''}`}
+              onClick={() => onStartEdit(nodePath, nodeKey, nodeValue)}
+            >
+              编辑
+            </button>
           </div>
         ) : null}
       </div>
@@ -341,10 +291,6 @@ function TreeNode({
                 nodePath={childPath}
                 nodeSegments={[...nodeSegments, child.segment]}
                 nodeValue={child.value}
-                onCancelEdit={onCancelEdit}
-                onChangeDraft={onChangeDraft}
-                onChangeKind={onChangeKind}
-                onSaveEdit={onSaveEdit}
                 onStartEdit={onStartEdit}
                 onToggle={onToggle}
               />
@@ -586,11 +532,16 @@ export default function App() {
     });
   };
 
-  const handleStartEdit = (path: string, value: null | boolean | number | string) => {
+  const handleStartEdit = (
+    path: string,
+    nodeKey: string,
+    value: null | boolean | number | string,
+  ) => {
     setEditingState({
       path,
       kind: getPrimitiveKind(value),
       draft: getEditableDraft(value),
+      nodeKey,
     });
   };
 
@@ -820,28 +771,6 @@ export default function App() {
                         nodePath="root"
                         nodeSegments={[]}
                         nodeValue={parsedTreeData}
-                        onCancelEdit={() => setEditingState(null)}
-                        onChangeDraft={(value) =>
-                          setEditingState((previous) => (previous ? { ...previous, draft: value } : previous))
-                        }
-                        onChangeKind={(kind) =>
-                          setEditingState((previous) => {
-                            if (!previous) {
-                              return previous;
-                            }
-
-                            if (kind === 'boolean') {
-                              return { ...previous, kind, draft: 'true' };
-                            }
-
-                            if (kind === 'null') {
-                              return { ...previous, kind, draft: '' };
-                            }
-
-                            return { ...previous, kind };
-                          })
-                        }
-                        onSaveEdit={handleSaveTreeEdit}
                         onStartEdit={handleStartEdit}
                         onToggle={handleToggleNode}
                       />
@@ -873,6 +802,128 @@ export default function App() {
           </div>
         </section>
       </main>
+
+      {editingState ? (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onClick={() => setEditingState(null)}
+        >
+          <div
+            className="edit-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="tree-edit-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="edit-modal-header">
+              <div>
+                <p className="edit-modal-eyebrow">Tree Edit</p>
+                <h2 id="tree-edit-title">编辑节点</h2>
+              </div>
+              <button
+                type="button"
+                className="modal-close"
+                onClick={() => setEditingState(null)}
+                aria-label="关闭编辑弹窗"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="edit-modal-path">
+              <strong>{editingState.nodeKey}</strong>
+              <span>{editingState.path}</span>
+            </div>
+
+            <div className="modal-form">
+              <label className="modal-field">
+                <span>值类型</span>
+                <select
+                  aria-label="值类型"
+                  value={editingState.kind}
+                  onChange={(event) =>
+                    setEditingState((previous) => {
+                      if (!previous) {
+                        return previous;
+                      }
+
+                      const kind = event.target.value as PrimitiveKind;
+
+                      if (kind === 'boolean') {
+                        return { ...previous, kind, draft: 'true' };
+                      }
+
+                      if (kind === 'null') {
+                        return { ...previous, kind, draft: '' };
+                      }
+
+                      return { ...previous, kind };
+                    })
+                  }
+                >
+                  <option value="string">string</option>
+                  <option value="number">number</option>
+                  <option value="boolean">boolean</option>
+                  <option value="null">null</option>
+                </select>
+              </label>
+
+              {editingState.kind === 'boolean' ? (
+                <label className="modal-field">
+                  <span>布尔值</span>
+                  <select
+                    aria-label="布尔值"
+                    value={editingState.draft}
+                    onChange={(event) =>
+                      setEditingState((previous) =>
+                        previous ? { ...previous, draft: event.target.value } : previous,
+                      )
+                    }
+                  >
+                    <option value="true">true</option>
+                    <option value="false">false</option>
+                  </select>
+                </label>
+              ) : null}
+
+              {editingState.kind === 'string' || editingState.kind === 'number' ? (
+                <label className="modal-field">
+                  <span>{editingState.kind === 'string' ? '文本值' : '数字值'}</span>
+                  <input
+                    aria-label="节点值"
+                    type="text"
+                    value={editingState.draft}
+                    onChange={(event) =>
+                      setEditingState((previous) =>
+                        previous ? { ...previous, draft: event.target.value } : previous,
+                      )
+                    }
+                    placeholder={editingState.kind === 'string' ? '输入文本' : '输入数字'}
+                  />
+                </label>
+              ) : null}
+
+              {editingState.kind === 'null' ? (
+                <div className="modal-null-tip">`null` 类型不需要额外输入值。</div>
+              ) : null}
+            </div>
+
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="ghost"
+                onClick={() => setEditingState(null)}
+              >
+                取消
+              </button>
+              <button type="button" onClick={handleSaveTreeEdit}>
+                保存修改
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
