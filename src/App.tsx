@@ -11,6 +11,13 @@ type StatusState = {
 
 type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 type ViewMode = 'editor' | 'split' | 'tree';
+type PrimitiveKind = 'string' | 'number' | 'boolean' | 'null';
+type PathSegment = string | number;
+type EditingState = {
+  path: string;
+  kind: PrimitiveKind;
+  draft: string;
+};
 
 const EDITOR_LINE_HEIGHT = 24;
 const EDITOR_PADDING_TOP = 18;
@@ -86,12 +93,67 @@ function formatPreviewValue(value: JsonValue) {
   return String(value);
 }
 
+function isPrimitiveValue(value: JsonValue): value is null | boolean | number | string {
+  return value === null || typeof value === 'boolean' || typeof value === 'number' || typeof value === 'string';
+}
+
+function getPrimitiveKind(value: null | boolean | number | string): PrimitiveKind {
+  if (value === null) {
+    return 'null';
+  }
+
+  if (typeof value === 'boolean') {
+    return 'boolean';
+  }
+
+  if (typeof value === 'number') {
+    return 'number';
+  }
+
+  return 'string';
+}
+
+function getEditableDraft(value: null | boolean | number | string) {
+  if (value === null) {
+    return '';
+  }
+
+  if (typeof value === 'boolean') {
+    return value ? 'true' : 'false';
+  }
+
+  return String(value);
+}
+
+function parseDraftValue(kind: PrimitiveKind, draft: string): JsonValue {
+  if (kind === 'null') {
+    return null;
+  }
+
+  if (kind === 'boolean') {
+    return draft === 'true';
+  }
+
+  if (kind === 'number') {
+    const parsed = Number(draft);
+
+    if (!Number.isFinite(parsed)) {
+      throw new Error('数字类型必须是有限数字。');
+    }
+
+    return parsed;
+  }
+
+  return draft;
+}
+
 function getNodeChildren(value: JsonValue) {
   if (Array.isArray(value)) {
     return value.map((child, index) => ({
       label: `[${index}]`,
       value: child,
       path: `[${index}]`,
+      segment: index,
     }));
   }
 
@@ -100,6 +162,7 @@ function getNodeChildren(value: JsonValue) {
       label: key,
       value: child,
       path: key,
+      segment: key,
     }));
   }
 
@@ -118,48 +181,150 @@ function joinPath(parentPath: string, nextPath: string) {
   return `${parentPath}.${nextPath}`;
 }
 
+function setValueAtPath(root: JsonValue, segments: PathSegment[], nextValue: JsonValue): JsonValue {
+  if (segments.length === 0) {
+    return nextValue;
+  }
+
+  const [currentSegment, ...rest] = segments;
+
+  if (Array.isArray(root) && typeof currentSegment === 'number') {
+    return root.map((item, index) =>
+      index === currentSegment ? setValueAtPath(item, rest, nextValue) : item,
+    );
+  }
+
+  if (root && typeof root === 'object' && typeof currentSegment === 'string') {
+    return Object.fromEntries(
+      Object.entries(root).map(([key, value]) => [
+        key,
+        key === currentSegment ? setValueAtPath(value, rest, nextValue) : value,
+      ]),
+    );
+  }
+
+  return root;
+}
+
 type TreeNodeProps = {
   expandedPaths: Set<string>;
+  editingState: EditingState | null;
   level?: number;
   nodeKey: string;
   nodePath: string;
+  nodeSegments: PathSegment[];
   nodeValue: JsonValue;
+  onCancelEdit: () => void;
+  onChangeDraft: (value: string) => void;
+  onChangeKind: (kind: PrimitiveKind) => void;
+  onSaveEdit: () => void;
+  onStartEdit: (path: string, value: null | boolean | number | string) => void;
   onToggle: (path: string) => void;
 };
 
 function TreeNode({
   expandedPaths,
+  editingState,
   level = 0,
   nodeKey,
   nodePath,
+  nodeSegments,
   nodeValue,
+  onCancelEdit,
+  onChangeDraft,
+  onChangeKind,
+  onSaveEdit,
+  onStartEdit,
   onToggle,
 }: TreeNodeProps) {
   const children = getNodeChildren(nodeValue);
   const isExpandable = children.length > 0;
   const isExpanded = expandedPaths.has(nodePath);
+  const isPrimitive = isPrimitiveValue(nodeValue);
+  const isEditing = editingState?.path === nodePath;
 
   return (
     <div className="tree-node">
-      <button
-        type="button"
+      <div
         className={`tree-row ${isExpandable ? 'is-expandable' : 'is-leaf'} ${isExpanded ? 'is-expanded' : ''}`}
         style={{ paddingLeft: `${level * 16 + 10}px` }}
-        onClick={() => {
-          if (isExpandable) {
-            onToggle(nodePath);
-          }
-        }}
       >
-        <span className="tree-caret" aria-hidden="true">
-          {isExpandable ? (isExpanded ? '▾' : '▸') : '•'}
-        </span>
-        <span className="tree-key">{nodeKey}</span>
-        <span className="tree-separator">:</span>
-        <span className={`tree-value tree-value-${Array.isArray(nodeValue) ? 'array' : nodeValue === null ? 'null' : typeof nodeValue}`}>
-          {formatPreviewValue(nodeValue)}
-        </span>
-      </button>
+        <button
+          type="button"
+          className="tree-row-main"
+          onClick={() => {
+            if (isExpandable) {
+              onToggle(nodePath);
+            }
+          }}
+        >
+          <span className="tree-caret" aria-hidden="true">
+            {isExpandable ? (isExpanded ? '▾' : '▸') : '•'}
+          </span>
+          <span className="tree-key">{nodeKey}</span>
+          <span className="tree-separator">:</span>
+          <span
+            className={`tree-value tree-value-${Array.isArray(nodeValue) ? 'array' : nodeValue === null ? 'null' : typeof nodeValue}`}
+          >
+            {formatPreviewValue(nodeValue)}
+          </span>
+        </button>
+
+        {isPrimitive ? (
+          <div className="tree-actions">
+            {isEditing ? (
+              <div className="tree-editor">
+                <select
+                  aria-label="值类型"
+                  value={editingState.kind}
+                  onChange={(event) => onChangeKind(event.target.value as PrimitiveKind)}
+                >
+                  <option value="string">string</option>
+                  <option value="number">number</option>
+                  <option value="boolean">boolean</option>
+                  <option value="null">null</option>
+                </select>
+
+                {editingState.kind === 'boolean' ? (
+                  <select
+                    aria-label="布尔值"
+                    value={editingState.draft}
+                    onChange={(event) => onChangeDraft(event.target.value)}
+                  >
+                    <option value="true">true</option>
+                    <option value="false">false</option>
+                  </select>
+                ) : null}
+
+                {editingState.kind === 'string' || editingState.kind === 'number' ? (
+                  <input
+                    aria-label="节点值"
+                    type="text"
+                    value={editingState.draft}
+                    onChange={(event) => onChangeDraft(event.target.value)}
+                    placeholder={editingState.kind === 'string' ? '输入文本' : '输入数字'}
+                  />
+                ) : null}
+
+                <button type="button" className="tree-action-button save" onClick={onSaveEdit}>
+                  保存
+                </button>
+                <button type="button" className="tree-action-button cancel" onClick={onCancelEdit}>
+                  取消
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="tree-action-button"
+                onClick={() => onStartEdit(nodePath, nodeValue)}
+              >
+                编辑
+              </button>
+            )}
+          </div>
+        ) : null}
+      </div>
 
       {isExpandable && isExpanded ? (
         <div className="tree-children">
@@ -170,10 +335,17 @@ function TreeNode({
               <TreeNode
                 key={childPath}
                 expandedPaths={expandedPaths}
+                editingState={editingState}
                 level={level + 1}
                 nodeKey={child.label}
                 nodePath={childPath}
+                nodeSegments={[...nodeSegments, child.segment]}
                 nodeValue={child.value}
+                onCancelEdit={onCancelEdit}
+                onChangeDraft={onChangeDraft}
+                onChangeKind={onChangeKind}
+                onSaveEdit={onSaveEdit}
+                onStartEdit={onStartEdit}
                 onToggle={onToggle}
               />
             );
@@ -215,6 +387,7 @@ export default function App() {
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(
     () => new Set(['root', 'root.features']),
   );
+  const [editingState, setEditingState] = useState<EditingState | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const lineNumbers = useMemo(
     () => Array.from({ length: text === '' ? 1 : text.split('\n').length }, (_, index) => index + 1),
@@ -413,6 +586,58 @@ export default function App() {
     });
   };
 
+  const handleStartEdit = (path: string, value: null | boolean | number | string) => {
+    setEditingState({
+      path,
+      kind: getPrimitiveKind(value),
+      draft: getEditableDraft(value),
+    });
+  };
+
+  const handleSaveTreeEdit = () => {
+    if (!editingState || !parsedTreeData) {
+      return;
+    }
+
+    const rawSegments = editingState.path.replace(/^root\.?/, '');
+    const segments = rawSegments === ''
+      ? []
+      : rawSegments
+          .split('.')
+          .flatMap((segment) => {
+            const parts = segment.split(/(\[\d+\])/g).filter(Boolean);
+            return parts.map((part) => {
+              if (part.startsWith('[') && part.endsWith(']')) {
+                return Number(part.slice(1, -1));
+              }
+
+              return part;
+            });
+          }) as PathSegment[];
+
+    try {
+      const nextValue = parseDraftValue(editingState.kind, editingState.draft);
+      const updatedTree = setValueAtPath(parsedTreeData, segments, nextValue);
+      const formatted = JSON.stringify(updatedTree, null, 2);
+
+      setText(formatted);
+      setEditingState(null);
+      setStatus({
+        tone: 'success',
+        title: '树形编辑已保存',
+        detail: `已更新 ${editingState.path} 的值，并同步回文本编辑器。`,
+        errorLine: null,
+      });
+    } catch (error) {
+      setStatus({
+        tone: 'error',
+        title: '保存失败',
+        detail: error instanceof Error ? error.message : '无法保存当前树形编辑。',
+        errorLine: null,
+      });
+    }
+  };
+
   return (
     <div className="app-shell">
       <div className="ambient ambient-left" />
@@ -590,9 +815,34 @@ export default function App() {
                     <div className="tree-content">
                       <TreeNode
                         expandedPaths={expandedPaths}
+                        editingState={editingState}
                         nodeKey="root"
                         nodePath="root"
+                        nodeSegments={[]}
                         nodeValue={parsedTreeData}
+                        onCancelEdit={() => setEditingState(null)}
+                        onChangeDraft={(value) =>
+                          setEditingState((previous) => (previous ? { ...previous, draft: value } : previous))
+                        }
+                        onChangeKind={(kind) =>
+                          setEditingState((previous) => {
+                            if (!previous) {
+                              return previous;
+                            }
+
+                            if (kind === 'boolean') {
+                              return { ...previous, kind, draft: 'true' };
+                            }
+
+                            if (kind === 'null') {
+                              return { ...previous, kind, draft: '' };
+                            }
+
+                            return { ...previous, kind };
+                          })
+                        }
+                        onSaveEdit={handleSaveTreeEdit}
+                        onStartEdit={handleStartEdit}
                         onToggle={handleToggleNode}
                       />
                     </div>

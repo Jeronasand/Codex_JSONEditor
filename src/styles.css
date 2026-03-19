@@ -364,12 +364,22 @@ button.toggle-active {
 }
 
 .tree-row {
-  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-top: 0.2rem;
+  padding-bottom: 0.2rem;
+  border-radius: 0;
+}
+
+.tree-row-main {
+  flex: 1 1 auto;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  padding-top: 0.45rem;
-  padding-bottom: 0.45rem;
+  padding: 0.45rem 0;
   border-radius: 0;
   background: transparent;
   box-shadow: none;
@@ -377,11 +387,11 @@ button.toggle-active {
   text-align: left;
 }
 
-.tree-row:hover {
+.tree-row-main:hover {
   background: rgba(255, 255, 255, 0.06);
 }
 
-.tree-row.is-expanded {
+.tree-row.is-expanded .tree-row-main {
   background: rgba(255, 255, 255, 0.04);
 }
 
@@ -423,6 +433,54 @@ button.toggle-active {
 .tree-value-object,
 .tree-value-array {
   color: #c6cad8;
+}
+
+.tree-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  padding-right: 0.75rem;
+}
+
+.tree-action-button {
+  padding: 0.4rem 0.8rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-main);
+  box-shadow: none;
+}
+
+.tree-action-button.save {
+  background: linear-gradient(135deg, #f4dfb7 0%, #ffa25b 100%);
+  color: #111828;
+}
+
+.tree-action-button.cancel {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.tree-editor {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.tree-editor input,
+.tree-editor select {
+  min-width: 90px;
+  padding: 0.42rem 0.68rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-main);
+  outline: none;
+}
+
+.tree-editor input:focus,
+.tree-editor select:focus {
+  border-color: rgba(255, 162, 91, 0.48);
+  box-shadow: 0 0 0 3px rgba(255, 162, 91, 0.12);
 }
 
 .tree-empty {
