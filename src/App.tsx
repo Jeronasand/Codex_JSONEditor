@@ -20,6 +20,11 @@ type EditingState = {
   nodeKey: string;
 };
 
+type ParseResult = {
+  value: JsonValue;
+  unwrappedStringLayers: number;
+};
+
 const EDITOR_LINE_HEIGHT = 24;
 const EDITOR_PADDING_TOP = 18;
 
@@ -69,9 +74,64 @@ function getLineAndColumn(source: string, position: number) {
   return { line, column };
 }
 
-function parseJson(text: string) {
+function tryParseNestedJsonString(value: string, maxDepth = 3): ParseResult {
+  let currentValue = value;
+  let unwrappedStringLayers = 0;
+
+  while (unwrappedStringLayers < maxDepth) {
+    const trimmed = currentValue.trim();
+
+    if (trimmed === '') {
+      break;
+    }
+
+    const likelyJsonPayload =
+      trimmed.startsWith('{') ||
+      trimmed.startsWith('[') ||
+      trimmed === 'null' ||
+      trimmed === 'true' ||
+      trimmed === 'false' ||
+      /^-?\d/.test(trimmed);
+
+    if (!likelyJsonPayload) {
+      break;
+    }
+
+    try {
+      const nestedValue = JSON.parse(trimmed) as JsonValue;
+
+      if (typeof nestedValue === 'string') {
+        currentValue = nestedValue;
+        unwrappedStringLayers += 1;
+        continue;
+      }
+
+      return {
+        value: nestedValue,
+        unwrappedStringLayers: unwrappedStringLayers + 1,
+      };
+    } catch {
+      break;
+    }
+  }
+
+  return {
+    value: value as JsonValue,
+    unwrappedStringLayers,
+  };
+}
+
+function parseJson(text: string): ParseResult {
   const parsed = JSON.parse(text) as JsonValue;
-  return parsed;
+
+  if (typeof parsed !== 'string') {
+    return {
+      value: parsed,
+      unwrappedStringLayers: 0,
+    };
+  }
+
+  return tryParseNestedJsonString(parsed);
 }
 
 function formatPreviewValue(value: JsonValue) {
@@ -325,6 +385,14 @@ function buildErrorStatus(text: string, error: unknown): StatusState {
   };
 }
 
+function getRootTypeLabel(value: JsonValue) {
+  if (Array.isArray(value)) {
+    return 'array';
+  }
+
+  return typeof value;
+}
+
 export default function App() {
   const [text, setText] = useState(starterJson);
   const [status, setStatus] = useState<StatusState>(defaultStatus);
@@ -363,10 +431,13 @@ export default function App() {
 
     try {
       const parsed = parseJson(nextText);
+      const parsedFromJsonString = parsed.unwrappedStringLayers > 0;
       setStatus({
         tone: 'success',
         title: 'JSON 有效',
-        detail: `解析成功，根节点类型为 ${Array.isArray(parsed) ? 'array' : typeof parsed}。`,
+        detail: parsedFromJsonString
+          ? `解析成功，已按 jsonString 自动展开 ${parsed.unwrappedStringLayers} 层，根节点类型为 ${getRootTypeLabel(parsed.value)}。`
+          : `解析成功，根节点类型为 ${getRootTypeLabel(parsed.value)}。`,
         errorLine: null,
       });
       return parsed;
@@ -383,12 +454,15 @@ export default function App() {
       return;
     }
 
-    const formatted = JSON.stringify(parsed, null, 2);
+    const formatted = JSON.stringify(parsed.value, null, 2);
     setText(formatted);
     setStatus({
       tone: 'success',
       title: '格式化完成',
-      detail: '当前 JSON 已按 2 空格缩进重新排版。',
+      detail:
+        parsed.unwrappedStringLayers > 0
+          ? `检测到 jsonString，已自动展开 ${parsed.unwrappedStringLayers} 层并转换为标准 JSON 格式。`
+          : '当前 JSON 已按 2 空格缩进重新排版。',
       errorLine: null,
     });
   };
@@ -400,12 +474,15 @@ export default function App() {
       return;
     }
 
-    const minified = JSON.stringify(parsed);
+    const minified = JSON.stringify(parsed.value);
     setText(minified);
     setStatus({
       tone: 'success',
       title: '压缩完成',
-      detail: '当前 JSON 已压缩为单行结构。',
+      detail:
+        parsed.unwrappedStringLayers > 0
+          ? `检测到 jsonString，已自动展开 ${parsed.unwrappedStringLayers} 层并压缩为标准 JSON。`
+          : '当前 JSON 已压缩为单行结构。',
       errorLine: null,
     });
   };
@@ -512,7 +589,7 @@ export default function App() {
     }
 
     try {
-      return parseJson(text);
+      return parseJson(text).value;
     } catch {
       return null;
     }

@@ -7,6 +7,7 @@
 ## 功能
 
 - 文本编辑 JSON
+- 支持自动解析 `jsonString` 包裹的 JSON 内容
 - 校验 JSON 合法性
 - 格式化 JSON
 - 压缩 JSON
