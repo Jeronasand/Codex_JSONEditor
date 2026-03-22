@@ -151,6 +151,7 @@ button.toggle-active {
   margin: 0.85rem 0 0;
   color: var(--text-muted);
   font-size: 1.02rem;
+  overflow-wrap: anywhere;
 }
 
 .meta-row {
@@ -194,6 +195,7 @@ button.toggle-active {
 .tips-grid p {
   margin: 0;
   color: var(--text-muted);
+  overflow-wrap: anywhere;
 }
 
 .panel {
@@ -226,6 +228,8 @@ button.toggle-active {
 
 .status span {
   color: var(--text-muted);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .status-idle {
@@ -387,6 +391,7 @@ button.toggle-active {
 .tree-row-main {
   flex: 1 1 auto;
   min-width: 0;
+  width: 100%;
   display: flex;
   align-items: center;
   gap: 0.4rem;
@@ -396,11 +401,7 @@ button.toggle-active {
   box-shadow: none;
   color: var(--text-main);
   text-align: left;
-}
-
-.tree-row-main .tree-value {
-  min-width: 0;
-  overflow-wrap: anywhere;
+  overflow: hidden;
 }
 
 .tree-row-main:hover {
@@ -427,10 +428,20 @@ button.toggle-active {
 
 .tree-key {
   color: #f4dfb7;
+  flex: 0 0 auto;
 }
 
 .tree-separator {
   color: rgba(198, 202, 216, 0.52);
+  flex: 0 0 auto;
+}
+
+.tree-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tree-value-string {
@@ -457,9 +468,11 @@ button.toggle-active {
   align-items: center;
   padding-right: 0.75rem;
   min-width: 0;
+  margin-left: auto;
 }
 
 .tree-action-button {
+  flex: 0 0 auto;
   padding: 0.4rem 0.8rem;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.08);
@@ -521,6 +534,12 @@ textarea {
   font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
   font-size: 0.95rem;
   line-height: var(--editor-line-height);
+  white-space: pre;
+  word-break: normal;
+  overflow-wrap: normal;
+  overflow-x: auto;
+  overflow-y: auto;
+  tab-size: 2;
   transition:
     border-color 140ms ease,
     box-shadow 140ms ease;
@@ -607,6 +626,7 @@ textarea::placeholder {
   color: var(--text-muted);
   font-size: 0.9rem;
   overflow-wrap: anywhere;
+  word-break: break-all;
 }
 
 .modal-form {
@@ -925,5 +945,9 @@ textarea::placeholder {
   .tree-row-main .tree-value,
   .tree-row-main .tree-separator {
     font-size: 0.8rem;
+  }
+
+  .tree-value {
+    white-space: nowrap;
   }
 }

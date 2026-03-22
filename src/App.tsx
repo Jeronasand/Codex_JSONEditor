@@ -23,6 +23,7 @@ type EditingState = {
 type ParseResult = {
   value: JsonValue;
   unwrappedStringLayers: number;
+  extractedFromSnippet: boolean;
 };
 
 const EDITOR_LINE_HEIGHT = 24;
@@ -109,6 +110,7 @@ function tryParseNestedJsonString(value: string, maxDepth = 3): ParseResult {
       return {
         value: nestedValue,
         unwrappedStringLayers: unwrappedStringLayers + 1,
+        extractedFromSnippet: false,
       };
     } catch {
       break;
@@ -118,20 +120,115 @@ function tryParseNestedJsonString(value: string, maxDepth = 3): ParseResult {
   return {
     value: value as JsonValue,
     unwrappedStringLayers,
+    extractedFromSnippet: false,
   };
 }
 
-function parseJson(text: string): ParseResult {
-  const parsed = JSON.parse(text) as JsonValue;
+function extractJsonCandidate(text: string) {
+  const openingChars = new Set(['{', '[']);
+  const pairs: Record<string, string> = { '{': '}', '[': ']' };
 
-  if (typeof parsed !== 'string') {
-    return {
-      value: parsed,
-      unwrappedStringLayers: 0,
-    };
+  for (let start = 0; start < text.length; start += 1) {
+    const opening = text[start];
+
+    if (!openingChars.has(opening)) {
+      continue;
+    }
+
+    const expectedClosing = pairs[opening];
+    const stack = [expectedClosing];
+    let inString = false;
+    let escaped = false;
+
+    for (let index = start + 1; index < text.length; index += 1) {
+      const char = text[index];
+
+      if (inString) {
+        if (escaped) {
+          escaped = false;
+          continue;
+        }
+
+        if (char === '\\') {
+          escaped = true;
+          continue;
+        }
+
+        if (char === '"') {
+          inString = false;
+        }
+
+        continue;
+      }
+
+      if (char === '"') {
+        inString = true;
+        continue;
+      }
+
+      if (char === '{') {
+        stack.push('}');
+        continue;
+      }
+
+      if (char === '[') {
+        stack.push(']');
+        continue;
+      }
+
+      if (char === '}' || char === ']') {
+        if (stack.at(-1) !== char) {
+          break;
+        }
+
+        stack.pop();
+
+        if (stack.length === 0) {
+          return text.slice(start, index + 1);
+        }
+      }
+    }
   }
 
-  return tryParseNestedJsonString(parsed);
+  return null;
+}
+
+function parseJson(text: string): ParseResult {
+  try {
+    const parsed = JSON.parse(text) as JsonValue;
+
+    if (typeof parsed !== 'string') {
+      return {
+        value: parsed,
+        unwrappedStringLayers: 0,
+        extractedFromSnippet: false,
+      };
+    }
+
+    return tryParseNestedJsonString(parsed);
+  } catch {
+    const candidate = extractJsonCandidate(text);
+
+    if (!candidate) {
+      throw new Error('No JSON payload found in the provided text.');
+    }
+
+    const parsedCandidate = JSON.parse(candidate) as JsonValue;
+
+    if (typeof parsedCandidate !== 'string') {
+      return {
+        value: parsedCandidate,
+        unwrappedStringLayers: 0,
+        extractedFromSnippet: true,
+      };
+    }
+
+    const nested = tryParseNestedJsonString(parsedCandidate);
+    return {
+      ...nested,
+      extractedFromSnippet: true,
+    };
+  }
 }
 
 function formatPreviewValue(value: JsonValue) {
@@ -152,6 +249,16 @@ function formatPreviewValue(value: JsonValue) {
   }
 
   return String(value);
+}
+
+function getTreeDisplayValue(value: JsonValue, maxLength = 96) {
+  const preview = formatPreviewValue(value);
+
+  if (preview.length <= maxLength) {
+    return preview;
+  }
+
+  return `${preview.slice(0, maxLength)}...`;
 }
 
 function isPrimitiveValue(value: JsonValue): value is null | boolean | number | string {
@@ -318,8 +425,9 @@ function TreeNode({
           <span className="tree-separator">:</span>
           <span
             className={`tree-value tree-value-${Array.isArray(nodeValue) ? 'array' : nodeValue === null ? 'null' : typeof nodeValue}`}
+            title={formatPreviewValue(nodeValue)}
           >
-            {formatPreviewValue(nodeValue)}
+            {getTreeDisplayValue(nodeValue)}
           </span>
         </button>
 
@@ -435,9 +543,14 @@ export default function App() {
       setStatus({
         tone: 'success',
         title: 'JSON 有效',
-        detail: parsedFromJsonString
-          ? `解析成功，已按 jsonString 自动展开 ${parsed.unwrappedStringLayers} 层，根节点类型为 ${getRootTypeLabel(parsed.value)}。`
-          : `解析成功，根节点类型为 ${getRootTypeLabel(parsed.value)}。`,
+        detail:
+          parsedFromJsonString && parsed.extractedFromSnippet
+            ? `解析成功，已从代码片段中提取 JSON，并自动展开 ${parsed.unwrappedStringLayers} 层 jsonString，根节点类型为 ${getRootTypeLabel(parsed.value)}。`
+            : parsedFromJsonString
+              ? `解析成功，已按 jsonString 自动展开 ${parsed.unwrappedStringLayers} 层，根节点类型为 ${getRootTypeLabel(parsed.value)}。`
+              : parsed.extractedFromSnippet
+                ? `解析成功，已从输入代码片段中提取 JSON，根节点类型为 ${getRootTypeLabel(parsed.value)}。`
+                : `解析成功，根节点类型为 ${getRootTypeLabel(parsed.value)}。`,
         errorLine: null,
       });
       return parsed;
@@ -456,15 +569,19 @@ export default function App() {
 
     const formatted = JSON.stringify(parsed.value, null, 2);
     setText(formatted);
-    setStatus({
-      tone: 'success',
-      title: '格式化完成',
-      detail:
-        parsed.unwrappedStringLayers > 0
-          ? `检测到 jsonString，已自动展开 ${parsed.unwrappedStringLayers} 层并转换为标准 JSON 格式。`
-          : '当前 JSON 已按 2 空格缩进重新排版。',
-      errorLine: null,
-    });
+      setStatus({
+        tone: 'success',
+        title: '格式化完成',
+        detail:
+          parsed.extractedFromSnippet && parsed.unwrappedStringLayers > 0
+            ? `已从代码片段中提取 JSON，并自动展开 ${parsed.unwrappedStringLayers} 层 jsonString，转换为标准 JSON 格式。`
+            : parsed.unwrappedStringLayers > 0
+              ? `检测到 jsonString，已自动展开 ${parsed.unwrappedStringLayers} 层并转换为标准 JSON 格式。`
+              : parsed.extractedFromSnippet
+                ? '已从代码片段中提取 JSON，并按 2 空格缩进重新排版。'
+                : '当前 JSON 已按 2 空格缩进重新排版。',
+        errorLine: null,
+      });
   };
 
   const handleMinify = () => {
@@ -476,15 +593,19 @@ export default function App() {
 
     const minified = JSON.stringify(parsed.value);
     setText(minified);
-    setStatus({
-      tone: 'success',
-      title: '压缩完成',
-      detail:
-        parsed.unwrappedStringLayers > 0
-          ? `检测到 jsonString，已自动展开 ${parsed.unwrappedStringLayers} 层并压缩为标准 JSON。`
-          : '当前 JSON 已压缩为单行结构。',
-      errorLine: null,
-    });
+      setStatus({
+        tone: 'success',
+        title: '压缩完成',
+        detail:
+          parsed.extractedFromSnippet && parsed.unwrappedStringLayers > 0
+            ? `已从代码片段中提取 JSON，并自动展开 ${parsed.unwrappedStringLayers} 层 jsonString，压缩为标准 JSON。`
+            : parsed.unwrappedStringLayers > 0
+              ? `检测到 jsonString，已自动展开 ${parsed.unwrappedStringLayers} 层并压缩为标准 JSON。`
+              : parsed.extractedFromSnippet
+                ? '已从代码片段中提取 JSON，并压缩为单行结构。'
+                : '当前 JSON 已压缩为单行结构。',
+        errorLine: null,
+      });
   };
 
   const handleValidate = () => {
@@ -794,6 +915,7 @@ export default function App() {
                     <textarea
                       id="json-editor"
                       spellCheck={false}
+                      wrap="off"
                       value={text}
                       onChange={(event) => setText(event.target.value)}
                       onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
